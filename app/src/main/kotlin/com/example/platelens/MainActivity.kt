@@ -67,8 +67,8 @@ fun PlateLensScreen(activity: ComponentActivity) {
             }
         }
     }
-    val imagePicker = remember {
-        activity.registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+val imagePicker = remember {
+        activity.registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             uri?.let {
                 val inputImage = InputImage.fromFilePath(context, it)
                 val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
@@ -100,7 +100,7 @@ fun PlateLensScreen(activity: ComponentActivity) {
             }) { Text("Voice log") }
             Spacer(Modifier.width(8.dp))
             Button(onClick = {
-                imagePicker.launch(ActivityResultContracts.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                imagePicker.launch("image/*")
             }) { Text("Photo log") }
         }
         Text("Scanned: $scanned", modifier = Modifier.padding(8.dp))
