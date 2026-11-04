@@ -31,6 +31,8 @@ import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import java.util.concurrent.Executors
 
+data class FoodEntry(val name: String, val calories: Int)
+
 fun fetchFoodInfo(barcode: String, onResult: (String, Int) -> Unit) {
     Thread {
         try {
