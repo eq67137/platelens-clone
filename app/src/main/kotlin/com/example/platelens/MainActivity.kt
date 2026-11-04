@@ -31,7 +31,26 @@ import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import java.util.concurrent.Executors
 
-data class FoodEntry(val name: String, val calories: Int)
+fun fetchFoodInfo(barcode: String, onResult: (String, Int) -> Unit) {
+    Thread {
+        try {
+            val url = java.net.URL("https://world.openfoodfacts.org/api/v0/product/$barcode.json")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            val response = conn.inputStream.bufferedReader().readText()
+            val json = org.json.JSONObject(response)
+            val product = json.optJSONObject("product")
+            val name = product?.optString("product_name", barcode) ?: barcode
+            val nutriments = product?.optJSONObject("nutriments")
+            val kcal = nutriments?.optDouble("energy-kcal_100g", 0.0)?.toInt() ?: 0
+            onResult(name, kcal)
+        } catch (e: Exception) {
+            onResult(barcode, 0)
+        }
+    }.start()
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,7 +106,9 @@ val imagePicker = remember {
             CameraPreview(
                 onBarcode = { code ->
                     scanned = code
-                    foodLog.add(FoodEntry(code, 0))
+                    fetchFoodInfo(code) { name, kcal ->
+                        foodLog.add(FoodEntry(name, kcal))
+                    }
                 }
             )
         }
