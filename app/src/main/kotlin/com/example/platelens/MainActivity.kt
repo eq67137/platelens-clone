@@ -1,6 +1,8 @@
 package com.example.platelens
 
 import android.Manifest
+import android.content.Intent
+import android.speech.RecognizerIntent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -24,25 +27,24 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import java.util.concurrent.Executors
 
 data class FoodEntry(val name: String, val calories: Int)
 
 class MainActivity : ComponentActivity() {
-    private val cameraPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED) {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+                .launch(Manifest.permission.CAMERA)
         }
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    PlateLensScreen()
+                    PlateLensScreen(this)
                 }
             }
         }
@@ -50,9 +52,35 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PlateLensScreen() {
+fun PlateLensScreen(activity: ComponentActivity) {
+    val context = LocalContext.current
     val foodLog = remember { mutableStateListOf<FoodEntry>() }
     var scanned by remember { mutableStateOf("") }
+    var voiceText by remember { mutableStateOf("") }
+
+    val voiceLauncher = remember {
+        activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            matches?.firstOrNull()?.let { t ->
+                voiceText = t
+                foodLog.add(FoodEntry(t, 0))
+            }
+        }
+    }
+    val imagePicker = remember {
+        activity.registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            uri?.let {
+                val inputImage = InputImage.fromFilePath(context, it)
+                val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
+                labeler.process(inputImage)
+                    .addOnSuccessListener { labels ->
+                        labels.firstOrNull()?.text?.let { label ->
+                            foodLog.add(FoodEntry(label, 0))
+                        }
+                    }
+            }
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f)) {
@@ -63,7 +91,20 @@ fun PlateLensScreen() {
                 }
             )
         }
+        Row(modifier = Modifier.padding(8.dp)) {
+            Button(onClick = {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                }
+                voiceLauncher.launch(intent)
+            }) { Text("Voice log") }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = {
+                imagePicker.launch(ActivityResultContracts.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }) { Text("Photo log") }
+        }
         Text("Scanned: $scanned", modifier = Modifier.padding(8.dp))
+        if (voiceText.isNotEmpty()) Text("Voice: $voiceText", modifier = Modifier.padding(8.dp))
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(foodLog.size) { i ->
                 Text("${foodLog[i].name} - ${foodLog[i].calories} kcal", modifier = Modifier.padding(8.dp))
